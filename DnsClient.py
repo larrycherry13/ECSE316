@@ -89,18 +89,15 @@ def send_dns_query(server, port, query, timeout, retries):
 
 # Parse the DNS response
 def parse_dns_response(response, query_type):
-    #Parse header
+    # Parse header
     transaction_id, flags, qdcount, ancount, nscount, arcount = struct.unpack('!HHHHHH', response[:12])
 
-    #Check for flags
+    # Check for flags
     auth = parse_flags(flags)
-
 
     if auth.startswith("ERROR"):
         print(auth)
         return
-    
-    
     elif auth == "NOTFOUND":
         print(auth)
         return
@@ -111,93 +108,67 @@ def parse_dns_response(response, query_type):
 
     offset = 12
 
+    # Skip over the question section
     while response[offset] != 0:
         label_len = response[offset]
         offset += label_len + 1
-    offset += 5     # Termination label (1 byte) + QTYPE (2 bytes) + QCLASS (2 bytes)
+    offset += 5  # Skip termination label (1 byte) + QTYPE (2 bytes) + QCLASS (2 bytes)
 
     # Parse the answer section
     print(f"*Answer Section ({ancount} records)*")
     
     for _ in range(ancount):
-            if offset + 12 > len(response):
-                print("ERROR\tIncomplete answer record. Exiting.")
-                return
-            
-            while True:
-                if response[offset] == 0:
-                    offset += 1
-                    break
-                if response[offset] & 0xC0 == 0xC0:
-                    offset += 2 #Skip to pointer
-                    break
+        if offset + 12 > len(response):
+            print("ERROR\tIncomplete answer record. Exiting.")
+            return
+
+        # Skip name/pointer
+        while True:
+            if response[offset] == 0:
                 offset += 1
+                break
+            if response[offset] & 0xC0 == 0xC0:
+                offset += 2  # Skip pointer (2 bytes)
+                break
+            offset += 1
 
-            res_type = int.from_bytes(response[offset:offset+2], byteorder='big')
-            offset += 2
+        res_type = int.from_bytes(response[offset:offset+2], byteorder='big')
+        offset += 2
 
-            class_field = int.from_bytes(response[offset:offset + 2], byteorder='big')
-            
-            
-            if class_field != 0x0001:
-                print("ERROR\tIncorrect class field in the answer section. Exiting.")
-                return
-            
-            offset += 2
+        class_field = int.from_bytes(response[offset:offset + 2], byteorder='big')
+        if class_field != 0x0001:
+            print("ERROR\tIncorrect class field in the answer section. Exiting.")
+            return
+        offset += 2
 
-            ttl = int.from_bytes(response[offset:offset + 4], byteorder='big')
-            offset += 4
+        ttl = int.from_bytes(response[offset:offset + 4], byteorder='big')
+        offset += 4
 
-            rd_length = int.from_bytes(response[offset:offset + 2], byteorder='big')
-            offset += 2
+        rd_length = int.from_bytes(response[offset:offset + 2], byteorder='big')
+        offset += 2
 
-            if offset + rd_length > len(response):
-                print("ERROR\tIncomplete answer record data. Exiting.")
-                return
+        if offset + rd_length > len(response):
+            print("ERROR\tIncomplete answer record data. Exiting.")
+            return
+        
+        # Handle the resource record type
+        if res_type == 1:  # A record (IP address)
             rdata = response[offset:offset + rd_length]
-            offset += rd_length
+            print(f"IP\t{'.'.join(map(str, rdata))}\t{ttl}\t{auth}")
+        elif res_type == 2:  # NS record
+            alias = parse_answer_data(response, offset)
+            print(f"NS\t{alias}\t{ttl}\t{auth}")
+        elif res_type == 5:  # CNAME record
+            alias = parse_answer_data(response, offset)
+            print(f"CNAME\t{alias}\t{ttl}\t{auth}")
+        elif res_type == 15:  # MX record
+            pref = int.from_bytes(response[offset:offset + 2], "big")
+            alias = parse_answer_data(response, offset + 2)  # Skip preference field
+            print(f"MX\t{alias}\t{pref}\t{ttl}\t{auth}")
 
-            # Handle the resource record type
-            if res_type == 1:  # A record (IP address)
-                print(f"IP\t{'.'.join(map(str, rdata))}\t{ttl}\t{auth}")
-            elif res_type == 2:  # NS record
-                alias = parse_answer_data(response, offset)
-                print(f"NS\t{alias}\t{ttl}\t{auth}")
-            elif res_type == 5:  # CNAME record
-                alias = parse_answer_data(response, offset)
-                print(f"CNAME\t{alias}\t{ttl}\t{auth}")
-            elif res_type == 15:  # MX record
-                pref = int.from_bytes(rdata[:2], "big")
-                alias = parse_answer_data(response, offset)
-                print(f"MX\t{alias}\t{pref}\t{ttl}\t{auth}")
+        offset += rd_length  # Move offset forward by rd_length
 
-
-            # Reading the answer (skipping the domain name for simplicity)
-            response = response[2:]  # Skipping pointer or name
-            rtype, rclass, ttl, rdlength = struct.unpack('!HHIH', response[:10])
-            rdata = response[10:10+rdlength]
-            response = response[10+rdlength:]
-
-            # Handling A, MX, NS, and CNAME types
-            if rtype == 1:  # A record (IP address)
-                ip_address = '.'.join(map(str, rdata))
-                print(f"IP\t{ip_address}\t{ttl}\t{'auth' if flags & 0x0400 else 'nonauth'}")
-            
-            elif rtype == 15:  # MX record
-                preference = struct.unpack('!H', rdata[:2])[0]
-                exchange = rdata[2:].decode('utf-8')
-                print(f"MX\t{exchange}\t{preference}\t{ttl}\t{'auth' if flags & 0x0400 else 'nonauth'}")
-            
-            elif rtype == 2:  # NS record
-                ns = rdata.decode('utf-8')
-                print(f"NS\t{ns}\t{ttl}\t{'auth' if flags & 0x0400 else 'nonauth'}")
-            elif rtype == 5:  # CNAME record
-                cname = rdata.decode('utf-8')
-                print(f"CNAME\t{cname}\t{ttl}\t{'auth' if flags & 0x0400 else 'nonauth'}")
-    else:
-        print("NOTFOUND")
-
-    # Parsing Additional section if exists
+    # Parse additional section if exists
     if arcount > 0:
         print(f"***Additional Section ({arcount} records)***")
         # Implement parsing for Additional Section if needed
