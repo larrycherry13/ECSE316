@@ -60,7 +60,7 @@ def build_dns_query(domain_name, query_type):
     # Query Type (qtype: A = 1, NS = 2, MX = 15) and Class (1 = IN for Internet)
     question = struct.pack('!HH', query_type, 1)
     
-    return header + qname + question
+    return transaction_id, header + qname + question
 
 # Function to send the DNS query and receive a response
 def send_dns_query(server, port, query, timeout, retries):
@@ -88,9 +88,14 @@ def send_dns_query(server, port, query, timeout, retries):
     return None, None, retries
 
 # Parse the DNS response
-def parse_dns_response(response, query_type):
+def parse_dns_response(transaction_id, response, query_type):
     # Parse header
-    transaction_id, flags, qdcount, ancount, nscount, arcount = struct.unpack('!HHHHHH', response[:12])
+    response_id, flags, qdcount, ancount, nscount, arcount = struct.unpack('!HHHHHH', response[:12])
+
+    # Check if the transaction ID matches
+    if response_id != transaction_id:
+        print("ERROR\tTransaction ID does not match. Exiting.")
+        return
 
     # Check for flags
     auth = parse_flags(flags)
@@ -102,8 +107,14 @@ def parse_dns_response(response, query_type):
         print(auth)
         return
 
+    # Check if the response has any answers
     if ancount == 0:
         print("NOTFOUND")
+        return
+
+    # Check if the response has the same number of questions as the query
+    if qdcount != 1:
+        print("ERROR\tInvalid number of questions [1] in the response. Exiting.")
         return
 
     offset = 12
@@ -117,10 +128,96 @@ def parse_dns_response(response, query_type):
     # Parse the answer section
     print(f"*Answer Section ({ancount} records)*")
     
-    for _ in range(ancount):
+    offset = parse_records(response, offset, ancount, "Answer")
+
+    # Parse additional section if exists
+    if arcount > 0:
+        print(f"***Additional Section ({arcount} records)***")
+        
+        offset = parse_records(response, offset, arcount, "Additional")
+
+# Parse the flags in the DNS response
+def parse_flags(flags):
+    ERROR = ""
+
+    # flag positions
+    QR_MASK = 0x8000
+    OPCODE_MASK = 0x7800
+    AA_MASK = 0x0400  # Authoritative Answer
+    TC_MASK = 0x0200
+    RD_MASK = 0x0100
+    RA_MASK = 0x8000
+    Z_MASK = 0x0070
+    RCODE_MASK = 0x000F
+
+    print(str(flags) + "." + str(RD_MASK) + "." + str(flags & RD_MASK))
+    # Extract flags
+    is_response = (flags & QR_MASK) != 0
+    opcode = (flags & OPCODE_MASK) >> 11
+    is_authoritative = (flags & AA_MASK) != 0
+    is_truncated = (flags & TC_MASK) != 0
+    is_recursive_desired = (flags & RD_MASK) != 0
+    is_recursive_available = (flags & RA_MASK) != 0
+    z = (flags & Z_MASK) >> 4
+    
+    # Check if it’s a response
+    if not is_response:
+        ERROR += "ERROR\tNot a response packet"
+
+    # Check if it’s a query
+    if opcode != 0:
+        ERROR += "ERROR\tNot a standard query"
+
+    # Check if the response is truncated
+    if is_truncated:
+        ERROR += "ERROR\tResponse truncated"
+
+    # Check if recursion is available
+    if not is_recursive_available:
+        ERROR += "ERROR\tRecursion not available"
+
+    # Check if recursion was desired
+    if not is_recursive_desired:
+        ERROR += "ERROR\tRecursion not desired"
+
+    # Chez z value
+    if z != 0:
+        ERROR += "ERROR\tZ value must be 0"
+
+    #RCODE check
+    rcode = flags & RCODE_MASK
+    
+    # Handling RCODE values
+    response_codes = {
+        0: "No error condition",
+        1: "Format error: the name server was unable to interpret the query",
+        2: "Server failure: the name server was unable to process this query due to a problem with the name server",
+        3: "The domain name does not exist",
+        4: "Not implemented: the name server does not support the requested kind of query",
+        5: "Refused: the name server refuses to perform the specified operation for policy reasons"
+    }
+    
+    # Check rcode
+    if rcode != 0:
+        if rcode == 3:
+            if is_authoritative:
+                ERROR = "NOTFOUND"
+            else:
+                ERROR += "NOTFOUND\tNon-authoritative response, domain may or may not exist."
+        else:
+            ERROR += f"ERROR\t{response_codes.get(rcode, 'ERROR' + chr(9) + f'Unknown error with RCODE {rcode}')}"
+    
+    if ERROR:
+        return ERROR
+
+    return "auth" if is_authoritative else "nonauth"
+
+def parse_records(response, offset, record_count, section_type):
+    """Helper function to parse DNS records."""
+    for _ in range(record_count):
         if offset + 12 > len(response):
-            print("ERROR\tIncomplete answer record. Exiting.")
-            return
+            print(f"ERROR\tIncomplete {section_type} record. Exiting.")
+            return offset  # Return the offset to indicate failure
 
         # Skip name/pointer
         while True:
@@ -132,13 +229,13 @@ def parse_dns_response(response, query_type):
                 break
             offset += 1
 
-        res_type = int.from_bytes(response[offset:offset+2], byteorder='big')
+        res_type = int.from_bytes(response[offset:offset + 2], byteorder='big')
         offset += 2
 
         class_field = int.from_bytes(response[offset:offset + 2], byteorder='big')
         if class_field != 0x0001:
-            print("ERROR\tIncorrect class field in the answer section. Exiting.")
-            return
+            print(f"ERROR\tIncorrect class field in the {section_type} section. Exiting.")
+            return offset  # Return the offset to indicate failure
         offset += 2
 
         ttl = int.from_bytes(response[offset:offset + 4], byteorder='big')
@@ -148,64 +245,27 @@ def parse_dns_response(response, query_type):
         offset += 2
 
         if offset + rd_length > len(response):
-            print("ERROR\tIncomplete answer record data. Exiting.")
-            return
-        
+            print(f"ERROR\tIncomplete {section_type} record data. Exiting.")
+            return offset  # Return the offset to indicate failure
+
         # Handle the resource record type
         if res_type == 1:  # A record (IP address)
             rdata = response[offset:offset + rd_length]
-            print(f"IP\t{'.'.join(map(str, rdata))}\t{ttl}\t{auth}")
+            print(f"IP\t{'.'.join(map(str, rdata))}\t{ttl}\t{'auth' if section_type == 'Answer' else 'nonauth'}")
         elif res_type == 2:  # NS record
             alias = parse_answer_data(response, offset)
-            print(f"NS\t{alias}\t{ttl}\t{auth}")
+            print(f"NS\t{alias}\t{ttl}\t{'auth' if section_type == 'Answer' else 'nonauth'}")
         elif res_type == 5:  # CNAME record
             alias = parse_answer_data(response, offset)
-            print(f"CNAME\t{alias}\t{ttl}\t{auth}")
+            print(f"CNAME\t{alias}\t{ttl}\t{'auth' if section_type == 'Answer' else 'nonauth'}")
         elif res_type == 15:  # MX record
             pref = int.from_bytes(response[offset:offset + 2], "big")
             alias = parse_answer_data(response, offset + 2)  # Skip preference field
-            print(f"MX\t{alias}\t{pref}\t{ttl}\t{auth}")
+            print(f"MX\t{alias}\t{pref}\t{ttl}\t{'auth' if section_type == 'Answer' else 'nonauth'}")
 
         offset += rd_length  # Move offset forward by rd_length
 
-    # Parse additional section if exists
-    if arcount > 0:
-        print(f"***Additional Section ({arcount} records)***")
-        # Implement parsing for Additional Section if needed
-
-def parse_flags(flags):
-    
-    # flag positions
-    QR_MASK = 0x80
-    OPCODE_MASK = 0x78
-    AA_MASK = 0x0400  # Authoritative Answer
-    RCODE_MASK = 0x000F  # Response code (last 4 bits)
-    TC_MASK = 0x02
-    RD_MASK = 0x01
-
-    # AA check
-    is_authoritative = (flags & AA_MASK) != 0
-    
-    #RCODE check
-    rcode = flags & RCODE_MASK
-    
-    # Handling RCODE values
-    response_codes = {
-        0: "No error condition",
-        1: "Format error",
-        2: "Server failure",
-        3: "Not found(Non-existent domain)",
-        4: "Not implemented",
-        5: "Refused"
-    }
-    
-    if rcode != 0:
-        return f"ERROR\t{response_codes.get(rcode, 'Unknown error')}"
-    
-    
-    
-    return "auth" if is_authoritative else "nonauth"
-
+    return offset
 
 def parse_answer_data(response, offset):
     labels = []
@@ -248,7 +308,7 @@ if __name__ == "__main__":
     args = parse_arguments()
 
     # Build the DNS query
-    query = build_dns_query(args['domain_name'], args['query_type'])
+    transaction_id, query = build_dns_query(args['domain_name'], args['query_type'])
 
     # Print query info
     print_query_info(args['domain_name'], args['server'], args['query_type'])
@@ -259,7 +319,7 @@ if __name__ == "__main__":
 
     if response:
         # Parse the DNS response
-        parse_dns_response(response, args['query_type'])
+        parse_dns_response(transaction_id, response, args['query_type'])
         print(f"Response received after {time_taken:.2f} seconds ({attempts} retries)")
     else:
         print("ERROR: Maximum retries exceeded.")
