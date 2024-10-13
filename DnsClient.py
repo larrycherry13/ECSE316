@@ -128,13 +128,13 @@ def parse_dns_response(transaction_id, response, query_type):
     # Parse the answer section
     print(f"*Answer Section ({ancount} records)*")
     
-    offset = parse_records(response, offset, ancount, "Answer")
+    offset = parse_records(response, offset, ancount, auth, "Answer")
 
     # Parse additional section if exists
     if arcount > 0:
         print(f"***Additional Section ({arcount} records)***")
         
-        offset = parse_records(response, offset, arcount, "Additional")
+        offset = parse_records(response, offset, arcount, auth, "Additional")
 
 # Parse the flags in the DNS response
 def parse_flags(flags):
@@ -150,7 +150,6 @@ def parse_flags(flags):
     Z_MASK = 0x0070
     RCODE_MASK = 0x000F
 
-    print(str(flags) + "." + str(RD_MASK) + "." + str(flags & RD_MASK))
     # Extract flags
     is_response = (flags & QR_MASK) != 0
     opcode = (flags & OPCODE_MASK) >> 11
@@ -212,8 +211,8 @@ def parse_flags(flags):
 
     return "auth" if is_authoritative else "nonauth"
 
-def parse_records(response, offset, record_count, section_type):
-    """Helper function to parse DNS records."""
+# Helper function to parse DNS records
+def parse_records(response, offset, record_count, auth, section_type):
     for _ in range(record_count):
         if offset + 12 > len(response):
             print(f"ERROR\tIncomplete {section_type} record. Exiting.")
@@ -251,17 +250,17 @@ def parse_records(response, offset, record_count, section_type):
         # Handle the resource record type
         if res_type == 1:  # A record (IP address)
             rdata = response[offset:offset + rd_length]
-            print(f"IP\t{'.'.join(map(str, rdata))}\t{ttl}\t{'auth' if section_type == 'Answer' else 'nonauth'}")
+            print(f"IP\t{'.'.join(map(str, rdata))}\t{ttl}\t{auth}")
         elif res_type == 2:  # NS record
             alias = parse_answer_data(response, offset)
-            print(f"NS\t{alias}\t{ttl}\t{'auth' if section_type == 'Answer' else 'nonauth'}")
+            print(f"NS\t{alias}\t{ttl}\t{auth}")
         elif res_type == 5:  # CNAME record
             alias = parse_answer_data(response, offset)
-            print(f"CNAME\t{alias}\t{ttl}\t{'auth' if section_type == 'Answer' else 'nonauth'}")
+            print(f"CNAME\t{alias}\t{ttl}\t{auth}")
         elif res_type == 15:  # MX record
             pref = int.from_bytes(response[offset:offset + 2], "big")
             alias = parse_answer_data(response, offset + 2)  # Skip preference field
-            print(f"MX\t{alias}\t{pref}\t{ttl}\t{'auth' if section_type == 'Answer' else 'nonauth'}")
+            print(f"MX\t{alias}\t{pref}\t{ttl}\t{auth}")
 
         offset += rd_length  # Move offset forward by rd_length
 
