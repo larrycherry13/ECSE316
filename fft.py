@@ -65,7 +65,7 @@ def denoise(image):
     # Zero out high frequencies
     rows, cols = fft_result.shape
     crow, ccol = rows // 2, cols // 2
-    cutoff = min(rows, cols) // 2  # Example cutoff: 1/9 of the size
+    cutoff = min(rows, cols) // 9  #1/9 of the size
     row_min, row_max = crow - cutoff, crow + cutoff
     col_min, col_max = ccol - cutoff, ccol + cutoff
 
