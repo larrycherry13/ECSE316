@@ -5,7 +5,7 @@ import sys
 import os
 import cv2  # For image loading
 from matplotlib.colors import LogNorm
-from fourier_transforms import fft2d, ifft2d  # Importing the functions from your module
+from fourier_transforms import fft2d, ifft2d, fft_shift, ifft_shift  # Importing the functions from your module
 
 def is_image_file(filename):
     valid_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff']
@@ -38,19 +38,6 @@ def display_images(original, transformed, reconstructed):
     plt.axis('off')
     plt.show()
 
-
-import matplotlib.pyplot as plt
-import numpy as np
-from matplotlib.colors import LogNorm
-
-import matplotlib.pyplot as plt
-import numpy as np
-from matplotlib.colors import LogNorm
-
-import matplotlib.pyplot as plt
-import numpy as np
-from matplotlib.colors import LogNorm
-
 def fast_mode(image):
     """Display original image and its FFT."""
     fft_result = fft2d(image)
@@ -70,6 +57,40 @@ def fast_mode(image):
 
     plt.tight_layout()
     plt.show()
+
+def denoise(image):
+    """denoise the image by removing high frequencies and displaying results"""
+
+    fft_result = fft2d(image)
+    # Zero out high frequencies
+    rows, cols = fft_result.shape
+    crow, ccol = rows // 2, cols // 2
+    cutoff = min(rows, cols) // 2  # Example cutoff: 1/9 of the size
+    row_min, row_max = crow - cutoff, crow + cutoff
+    col_min, col_max = ccol - cutoff, ccol + cutoff
+
+    fft_result[row_min:row_max, col_min:col_max] = 0
+
+    denoised_fft = ifft2d(fft_result)
+
+    denoised_image = np.abs(denoised_fft)
+
+    print(f"Number of non-zero coefficients: {np.count_nonzero(fft_result)}")
+    print(f"Fraction of original coefficients: {np.count_nonzero(fft_result) / (rows * cols):.2%}")
+
+    plt.figure(figsize=(10, 5))
+    plt.subplot(1, 2, 1)
+    plt.axis('off')
+    plt.title("Original Image")
+    plt.imshow(image, cmap='gray')
+    plt.subplot(1, 2, 2)
+    plt.title("Denoised Image")
+    plt.imshow(denoised_image, cmap='gray')
+    plt.axis('off')
+    plt.show()
+    
+
+
 
 
 

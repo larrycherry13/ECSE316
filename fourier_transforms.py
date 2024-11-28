@@ -21,34 +21,102 @@ def inverse_naive_dft(X):
     return x / N
 
 def fft(x):
+    """Cooley Tukey recursive fft"""
+    # add zeros to make input a power of 2
     N = len(x)
-    if N & (N - 1):  # Ensure N is a power of two
-        padded_N = next_power_of_two(N)
-        x = np.resize(x, padded_N)
-    return rec_fft(x)
+    padded_N = next_power_of_two(N)
+    padded_x = np.zeros(padded_N, dtype=complex)
+    padded_x[:N] = x
 
-def rec_fft(x):
+    def _fft_recursive(x):
+        N = len(x)
+        if N <= 1:  # base case
+            return x
+        
+        # split into even and odd indices
+        even = _fft_recursive(x[0::2])
+        odd = _fft_recursive(x[1::2])
+
+        # compute twiddle factors
+        factors = np.exp(-2j * np.pi * np.arange(N // 2) / N)
+        
+        # combine even and odd parts
+        first_half = even + factors * odd
+        second_half = even - factors * odd
+        
+        return np.concatenate([first_half, second_half])
+
+    # compute fft and trim back to original length
+    result = _fft_recursive(padded_x)
+    return result[:N]
+
+
+def inverse_fft(x):
+    """Cooley-Tukey recursive inverse fft"""
+    # add zeros to make input a power of 2
     N = len(x)
-    if N <= 1:
-        return x
-    even = rec_fft(x[0::2])
-    odd = rec_fft(x[1::2])
-    T = np.exp(-2j * np.pi * np.arange(N // 2) / N) * odd
-    return np.concatenate([even + T, even - T])
+    padded_N = next_power_of_two(N)
+    padded_x = np.zeros(padded_N, dtype=complex)
+    padded_x[:N] = x
 
+    def _ifft_recursive(x):
+        N = len(x)
+        if N <= 1:  # base case
+            return x
+        
+        # split into even and odd indices
+        even = _ifft_recursive(x[0::2])
+        odd = _ifft_recursive(x[1::2])
 
-def inverse_fft(X):
-    N = len(X)
-    if N <= 1:
-        return X
-    even = inverse_fft(X[0::2])
-    odd = inverse_fft(X[1::2])
-    T = [np.exp(2j * np.pi * k / N) * odd[k] for k in range(N // 2)]
-    return [(even[k] + T[k]) / 2 for k in range(N // 2)] + [(even[k] - T[k]) / 2 for k in range(N // 2)]
+        # compute twiddle factors
+        factors = np.exp(2j * np.pi * np.arange(N // 2) / N)
+        
+        # combine even and odd parts
+        first_half = even + factors * odd
+        second_half = even - factors * odd
+        
+        return np.concatenate([first_half, second_half])
+
+    # compute ifft and trim back to original length
+    result = _ifft_recursive(padded_x)
+    return result[:N] / padded_N
 
 def fft2d(image):
-    return np.apply_along_axis(fft, axis=1, arr=np.apply_along_axis(fft, axis=0, arr=image))
+    """2D fft"""
+    rows, cols = image.shape
+    # compute 1D fft along rows
+    row_transform = np.zeros((rows, cols), dtype=complex)
+    for n in range(rows):
+        row_transform[n, :] = fft(image[n, :])
+    
+    # compute 1D fft along columns of row-transformed image
+    F = np.zeros((rows, cols), dtype=complex)
+    for m in range(cols):
+        F[:, m] = fft(row_transform[:, m])
+    
+    return F
 
 def ifft2d(F):
-    return np.apply_along_axis(inverse_fft, axis=1, arr=np.apply_along_axis(inverse_fft, axis=0, arr=F))
+    """2D inverse fft"""
+    rows, cols = F.shape
+    # compute 1D ifft along columns
+    col_transform = np.zeros((rows, cols), dtype=complex)
+    for m in range(cols):
+        col_transform[:, m] = inverse_fft(F[:, m])
+    
+    # Compute 1D ifft along rows of column-transformed image
+    f = np.zeros((rows, cols), dtype=complex)
+    for n in range(rows):
+        f[n, :] = inverse_fft(col_transform[n, :])
+    
+    return np.real(f)
 
+def fft_shift(fft_data):
+    """shift the zero-frequency component to the center of the spectrum. """
+    rows, cols = fft_data.shape
+    return np.roll(np.roll(fft_data, rows // 2, axis=0), cols // 2, axis=1)
+
+def ifft_shift(fft_data):
+    """shift back the zero-frequency component to the original position. """
+    rows, cols = fft_data.shape
+    return np.roll(np.roll(fft_data, -rows // 2, axis=0), -cols // 2, axis=1)
