@@ -5,7 +5,8 @@ import sys
 import os
 import cv2  # For image loading
 from matplotlib.colors import LogNorm
-from fourier_transforms import fft2d, ifft2d, fft_shift, ifft_shift  # Importing the functions from your module
+from fourier_transforms import fft2d, ifft2d, naive_dft, fft, dft2d # Importing the functions from your module
+import time
 
 def is_image_file(filename):
     valid_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff']
@@ -90,6 +91,125 @@ def denoise(image):
     plt.show()
     
 
+def compress(image):
+    """Compress the image by zeroing out smaller Fourier coefficients."""
+    # Compute 2D FFT of the image
+    fft_result = fft2d(image)
+    
+    # Get magnitude of the FFT
+    magnitude = np.abs(fft_result)
+    
+    # Total number of coefficients
+    total_coefficients = magnitude.size
+    
+    # Define compression levels as fractions of coefficients to zero
+    compression_levels = [0.0, 0.05, 0.30, 0.60, 0.9, 0.999]
+    
+    # Lists to store compressed images and non-zero coefficient counts
+    compressed_images = []
+    non_zeros = []
+
+    print("Non-Zero Coefficient Analysis:")
+    print("----------------------------")
+
+    for lvl in compression_levels:
+        # Calculate threshold: keep coefficients above this value
+        # (1 - lvl) ensures we keep more coefficients as compression level increases
+        threshold = np.percentile(magnitude, (1 - lvl) * 100)
+        
+        # Create a copy of FFT result to modify
+        compressed_fft = fft_result.copy()
+        
+        # Zero out coefficients below the threshold
+        compressed_fft[magnitude < threshold] = 0
+        
+        # Inverse FFT to get compressed image
+        compressed_image = np.abs(ifft2d(compressed_fft))
+        
+        # Store compressed image
+        compressed_images.append(compressed_image)
+        
+        # Count and store non-zero coefficients
+        num_non_zeros = np.count_nonzero(compressed_fft)
+        non_zeros.append(num_non_zeros)
+        
+        # Detailed printing
+        print(f"Compression Level: {lvl*100:6.1f}%")
+        print(f"Non-zero Coefficients:        {num_non_zeros:7d}")
+        print(f"Fraction of Coefficients:     {num_non_zeros / total_coefficients:7.2%}")
+        print(f"Memory Saved:                 {1 - (num_non_zeros / total_coefficients):7.2%}")
+        print("----------------------------")
+
+    # Plot the original and compressed images
+    plt.figure(figsize=(15, 10))
+    for i, (img, level) in enumerate(zip(compressed_images, compression_levels)):
+        plt.subplot(2, 3, i + 1)
+        plt.title(f"Compression: {level*100:.1f}%\nNon-zero: {non_zeros[i]}")
+        plt.imshow(img, cmap='gray')
+        plt.axis('off')
+    plt.show()
+
+
+def measure_runtime(method, size):
+    """ Helper function to measure the runtime of a method. """
+    x = np.random.random((size, size))
+    start_time = time.time()
+    method(x)
+    return time.time() - start_time
+
+
+def plot():
+    sizes = [2**i for i in range(5, 11)]  # From 32 to 1024
+    repetitions = 10  # Number of repetitions for each size
+
+    naive_times = []
+    fft_times = []
+    errors_naive = []
+    errors_fft = []
+
+    for size in sizes:
+        naive_results = []
+        fft_results = []
+        for _ in range(repetitions):
+            data = np.random.random((size, size))  # Generate random 2D data
+
+            # Measure runtime for 2D naive DFT
+            start_time = time.time()
+            dft2d(data)  # Assuming dft2d is the correct function name
+            naive_time = time.time() - start_time
+            naive_results.append(naive_time)
+
+            # Measure runtime for 2D FFT
+            start_time = time.time()
+            fft2d(data)  # Assuming fft2d is the correct function name
+            fft_time = time.time() - start_time
+            fft_results.append(fft_time)
+
+        naive_mean = np.mean(naive_results)
+        fft_mean = np.mean(fft_results)
+        naive_std = np.std(naive_results)
+        fft_std = np.std(fft_results)
+
+        naive_times.append(naive_mean)
+        fft_times.append(fft_mean)
+        errors_naive.append(naive_std)
+        errors_fft.append(fft_std)
+
+        print(f"Size: {size}x{size}")
+        print(f"Naive DFT - Mean: {naive_mean:.5f}s, Std: {naive_std:.5f}s")
+        print(f"FFT - Mean: {fft_mean:.5f}s, Std: {fft_std:.5f}s")
+
+    plt.figure(figsize=(10, 6))
+    plt.errorbar(sizes, naive_times, yerr=errors_naive, label='Naive DFT', fmt='-o')
+    plt.errorbar(sizes, fft_times, yerr=errors_fft, label='FFT', fmt='-o')
+    plt.xlabel('Array Size (NxN)')
+    plt.ylabel('Runtime (seconds)')
+    plt.title('Runtime Comparison of DFT and FFT')
+    plt.xscale('log', base=2)
+    plt.yscale('log')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 
 
 

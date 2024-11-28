@@ -20,6 +20,36 @@ def inverse_naive_dft(X):
             x[n] += X[k] * np.exp(2j * np.pi * k * n / N)
     return x / N
 
+
+def dft2d(image):
+    rows, cols = image.shape
+    # compute 1D dft along rows
+    row_transform = np.zeros((rows, cols), dtype=complex)
+    for n in range(rows):
+        row_transform[n, :] = naive_dft(image[n, :])
+    
+    # compute 1D dft along columns of row-transformed image
+    F = np.zeros((rows, cols), dtype=complex)
+    for m in range(cols):
+        F[:, m] = naive_dft(row_transform[:, m])
+
+    return F
+
+def idft2d(F):
+    """naive 2D inverse dft"""
+    rows, cols = F.shape
+    # compute 1D idft along columns
+    col_transform = np.zeros((rows, cols), dtype=complex)
+    for m in range(cols):
+        col_transform[:, m] = inverse_naive_dft(F[:, m])
+    
+    # compute 1D idft along rows of column-transformed image
+    f = np.zeros((rows, cols), dtype=complex)
+    for n in range(rows):
+        f[n, :] = inverse_naive_dft(col_transform[n, :])
+    
+    return np.real(f)
+
 def fft(x):
     """Cooley Tukey recursive fft"""
     # add zeros to make input a power of 2
