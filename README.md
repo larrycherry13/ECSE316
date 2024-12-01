@@ -1,24 +1,30 @@
-# ECSE 316 Assignment 1
+# ECSE 316 Assignment 2
 
 **Authors**:  
 - Laurent Chiricota (ID: 261113415)  
 - Samy Sabir (ID: 261119166)  
 
 **Python Version**: 3.11.5
+**Requirements**: numpy, cv2, matplotlib, pytest (for testing)
 
 ## Project Description
-This assignment implements a DNS client in Python. The client allows users to query DNS servers for information such as IP addresses, mail servers, and name servers.
+Fourier Transforms and inverses implementations as well as image processing such as denoising, compression
 
 ## Usage
 
 To run the program, use the following command structure:
 
-python DnsClient.py [-t timeout] [-r max-retries] [-p port] [-mx|-ns] @server name
+python fft.py [-m mode] [-i image]
 
-- `timeout`: (Optional) The time to wait for a response, in seconds. Default is 5 seconds.
-- `max-retries`: (Optional) The maximum number of retry attempts if the DNS query fails. Default is 3 retries.
-- `port`: (Optional) The port number for the DNS server. Default is 53.
-- `-mx`: (Optional) Request the mail server (MX record) of the domain.
-- `-ns`: (Optional) Request the name server (NS record) of the domain.
-- `@server`: The DNS server to query (e.g., 8.8.8.8 for Google's DNS server).
-- `name`: The domain name to resolve (e.g., example.com).
+- `mode`: (Optional) Processing mode. Default is Fast Mode.
+    - [1] (Default) `Fast mode`: Convert image to FFT form and display.
+    - [2] `Denoise`: The image is denoised by applying an FFT, truncating high frequencies and then displayed.
+    - [3] `Compress`: Compress image and plot.
+    - [4] `Plot runtime` graphs for the report.
+- `image`: (Optional) Filename of the image for the DFT (default: given image).
+
+## Testing
+
+To run a test file, run in cmd pip install pytest, and use the following command structure:
+
+python [test_filename].py

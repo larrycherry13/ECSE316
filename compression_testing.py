@@ -4,18 +4,14 @@ from fourier_transforms import fft2d, ifft2d
 import cv2
 
 def compress_by_magnitude(fft_result, keep_percent):
-    """
-    Retain the top `keep_percent` coefficients by magnitude.
-    """
+    """Retain the top `keep_percent` coefficients by magnitude"""
     threshold = np.percentile(np.abs(fft_result), (1 - keep_percent) * 100)
     compressed_fft = fft_result.copy()
     compressed_fft[np.abs(compressed_fft) < threshold] = 0
     return compressed_fft
 
 def compress_low_freq_and_top_magnitude(fft_result, low_freq_size, keep_percent):
-    """
-    Retain all low-frequency coefficients and top `keep_percent` high-frequency coefficients.
-    """
+    """Retain all low-frequency coefficients and top `keep_percent` high-frequency coefficients"""
     rows, cols = fft_result.shape
     crow, ccol = rows // 2, cols // 2
     row_min, row_max = crow - low_freq_size, crow + low_freq_size
@@ -75,17 +71,8 @@ def compress_band_filtering(fft_result, target_compression_ratio):
 
     return compressed_fft
 
-def adaptive_compression(fft_result, magnitude_threshold, low_freq_size):
-    """
-    Adaptive compression: Combine a magnitude threshold with low-frequency preservation.
-    """
-    compressed_fft = compress_low_freq_and_top_magnitude(fft_result, low_freq_size, magnitude_threshold)
-    return compressed_fft
-
 def evaluate_compression(original_image, fft_result, compression_function, **kwargs):
-    """
-    Apply a compression function, reconstruct the image, and compute quality metrics.
-    """
+    """Apply a compression function, reconstruct the image, and compute quality metrics"""
     compressed_fft = compression_function(fft_result, **kwargs)
     reconstructed_image = np.abs(ifft2d(compressed_fft))
 
@@ -100,9 +87,7 @@ def evaluate_compression(original_image, fft_result, compression_function, **kwa
     return reconstructed_image, compression_ratio, num_nonzero, mse
 
 def run_compression_experiments(image):
-    """
-    Run compression experiments with different methods and visualize results.
-    """
+    """Run compression experiments with different methods and visualize results"""
     fft_result = fft2d(image)
 
     # Methods and parameters

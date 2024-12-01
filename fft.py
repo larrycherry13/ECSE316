@@ -3,9 +3,9 @@ import matplotlib.pyplot as plt
 import argparse
 import sys
 import os
-import cv2  # For image loading
+import cv2
 from matplotlib.colors import LogNorm
-from fourier_transforms import fft2d, ifft2d, naive_dft, fft, dft2d # Importing the functions from your module
+from fourier_transforms import fft2d, ifft2d, dft2d
 import time
 
 def is_valid_image_file(filename):
@@ -22,31 +22,13 @@ def parse_input():
                         help="Path to the image file")
     return parser.parse_args()
 
-""" def display_images(original, transformed, reconstructed):
-    plt.figure(figsize=(18, 6))
-    plt.subplot(131)
-    plt.imshow(original, cmap='gray')
-    plt.title('Original Image')
-    plt.axis('off')
-
-    plt.subplot(132)
-    plt.imshow(np.log(np.abs(transformed) + 1), norm=LogNorm(), cmap='gray')
-    plt.title('FFT Magnitude Spectrum')
-    plt.axis('off')
-
-    plt.subplot(133)
-    plt.imshow(reconstructed, cmap='gray')
-    plt.title('Reconstructed Image')
-    plt.axis('off')
-    plt.show() """
-
 def fast_mode(image):
     """Display original image and its FFT."""
     fft_result = fft2d(image)
     magnitude_spectrum = np.log(np.abs(fft_result) + 1)  # Log scale
 
     # Scale down the figure size
-    plt.figure(figsize=(8, 4))  # Adjust these numbers as needed to scale down
+    plt.figure(figsize=(8, 4))
     plt.subplot(1, 2, 1)
     plt.imshow(image, cmap='gray', aspect='auto')
     plt.title('Original Image')
@@ -93,10 +75,9 @@ def denoise(image):
 def compress(image):
     """Compress the image by zeroing out smaller Fourier coefficients."""
     # Before compression
-    
     print("Original image mean:", image.mean())
 
-    # Preserve original image range instead of normalizing to [0, 1]
+    # Preserve original image range
     image_min = image.min()
     image_max = image.max()
     # Compute 2D FFT of the image
@@ -153,7 +134,7 @@ def compress(image):
     # After first FFT and inverse FFT
     print("First compressed image mean:", compressed_images[0].mean())
 
-    # Optional: Print pixel value differences
+    # Print pixel value differences
     diff = np.abs(image - compressed_images[0])
     print("Max pixel difference:", diff.max())
 
@@ -169,15 +150,6 @@ def compress(image):
         plt.imshow(img, cmap='gray', vmin=image_min, vmax=image_max)
         plt.axis('off')
     plt.show()
-
-
-def measure_runtime(method, size):
-    """ Helper function to measure the runtime of a method. """
-    x = np.random.random((size, size))
-    start_time = time.time()
-    method(x)
-    return time.time() - start_time
-
 
 def plot():
     sizes = [2**i for i in range(3, 9)]  # From 8x8 to 256x256
@@ -233,15 +205,13 @@ def plot():
 
 plot()
 
-
-
-
-
-
-
 def main():
     args = parse_input()
     image_path = args.image
+    if not is_valid_image_file(image_path):
+        print(f"Invalid image file: {image_path}")
+        sys.exit(1)
+
     mode = args.mode
     
     # Load the image

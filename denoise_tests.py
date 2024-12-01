@@ -3,9 +3,9 @@ import matplotlib.pyplot as plt
 import argparse
 import sys
 import os
-import cv2  # For image loading
+import cv2
 from matplotlib.colors import LogNorm
-from fourier_transforms import fft2d, ifft2d, naive_dft, fft, dft2d # Importing the functions from your module
+from fourier_transforms import fft2d, ifft2d, naive_dft, fft, dft2d
 import time
 
 def denoise_low_pass(image_path):
@@ -108,7 +108,7 @@ def denoise_band_pass(image_path):
     plt.title("Denoised Image (Band-Pass Filter)")
     plt.axis('off')
     plt.show()
-# Example usage
+
 def denoise_thresholding(image_path):
     image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
     if image is None:
@@ -142,4 +142,4 @@ def denoise_thresholding(image_path):
     plt.show()
 
 
-denoise_thresholding("moonlanding (1).png")
+denoise_thresholding("moonlanding.png")
