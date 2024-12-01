@@ -8,20 +8,21 @@ from matplotlib.colors import LogNorm
 from fourier_transforms import fft2d, ifft2d, naive_dft, fft, dft2d # Importing the functions from your module
 import time
 
-def is_image_file(filename):
+def is_valid_image_file(filename):
+    """Check if the file is a valid image file based on its extension."""
     valid_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff']
-    return os.path.splitext(filename)[1].lower() in valid_extensions
+    return os.path.isfile(filename) and os.path.splitext(filename)[1].lower() in valid_extensions
 
 def parse_input():
-
+    """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Process FFT on images.")
     parser.add_argument('-m', '--mode', type=str, default='1',
                         help="Mode of operation: 1=Fast Mode, 2=Denoise, 3=Compress, 4=Runtime Plot")
-    parser.add_argument('-i', '--image', type=str, required=True,
+    parser.add_argument('-i', '--image', type=str, default='moonlanding.png',
                         help="Path to the image file")
     return parser.parse_args()
 
-def display_images(original, transformed, reconstructed):
+""" def display_images(original, transformed, reconstructed):
     plt.figure(figsize=(18, 6))
     plt.subplot(131)
     plt.imshow(original, cmap='gray')
@@ -37,7 +38,7 @@ def display_images(original, transformed, reconstructed):
     plt.imshow(reconstructed, cmap='gray')
     plt.title('Reconstructed Image')
     plt.axis('off')
-    plt.show()
+    plt.show() """
 
 def fast_mode(image):
     """Display original image and its FFT."""
@@ -93,6 +94,13 @@ def denoise(image):
 
 def compress(image):
     """Compress the image by zeroing out smaller Fourier coefficients."""
+    # Before compression
+    
+    print("Original image mean:", image.mean())
+
+    # Preserve original image range instead of normalizing to [0, 1]
+    image_min = image.min()
+    image_max = image.max()
     # Compute 2D FFT of the image
     fft_result = fft2d(image)
     
@@ -114,8 +122,7 @@ def compress(image):
 
     for lvl in compression_levels:
         # Calculate threshold: keep coefficients above this value
-        # (1 - lvl) ensures we keep more coefficients as compression level increases
-        threshold = np.percentile(magnitude, (1 - lvl) * 100)
+        threshold = np.percentile(magnitude, lvl * 100)
         
         # Create a copy of FFT result to modify
         compressed_fft = fft_result.copy()
@@ -124,7 +131,12 @@ def compress(image):
         compressed_fft[magnitude < threshold] = 0
         
         # Inverse FFT to get compressed image
-        compressed_image = np.abs(ifft2d(compressed_fft))
+        compressed_image = np.real(ifft2d(compressed_fft))
+
+        # Rescale back to original image range
+        compressed_image = np.clip(compressed_image, compressed_image.min(), compressed_image.max())
+        compressed_image = ((compressed_image - compressed_image.min()) / 
+                            (compressed_image.max() - compressed_image.min())) * (image_max - image_min) + image_min
         
         # Store compressed image
         compressed_images.append(compressed_image)
@@ -140,12 +152,23 @@ def compress(image):
         print(f"Memory Saved:                 {1 - (num_non_zeros / total_coefficients):7.2%}")
         print("----------------------------")
 
+    # After first FFT and inverse FFT
+    print("First compressed image mean:", compressed_images[0].mean())
+
+    # Optional: Print pixel value differences
+    diff = np.abs(image - compressed_images[0])
+    print("Max pixel difference:", diff.max())
+
+    # Print detailed difference statistics
+    print("Mean Absolute Error:", np.mean(np.abs(image - compressed_images[0])))
+    print("Max Absolute Error:", np.max(np.abs(image - compressed_images[0])))
+
     # Plot the original and compressed images
     plt.figure(figsize=(15, 10))
     for i, (img, level) in enumerate(zip(compressed_images, compression_levels)):
         plt.subplot(2, 3, i + 1)
         plt.title(f"Compression: {level*100:.1f}%\nNon-zero: {non_zeros[i]}")
-        plt.imshow(img, cmap='gray')
+        plt.imshow(img, cmap='gray', vmin=image_min, vmax=image_max)
         plt.axis('off')
     plt.show()
 
@@ -175,13 +198,13 @@ def plot():
 
             # Measure runtime for 2D naive DFT
             start_time = time.time()
-            dft2d(data)  # Assuming dft2d is the correct function name
+            dft2d(data)
             naive_time = time.time() - start_time
             naive_results.append(naive_time)
 
             # Measure runtime for 2D FFT
             start_time = time.time()
-            fft2d(data)  # Assuming fft2d is the correct function name
+            fft2d(data)
             fft_time = time.time() - start_time
             fft_results.append(fft_time)
 

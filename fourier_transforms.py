@@ -1,6 +1,7 @@
 import numpy as np
 
 def next_power_of_two(n):
+    """Return the next power of 2 that is greater than or equal to n."""
     return 2 ** int(np.ceil(np.log2(n)))
 
 def naive_dft(signal):
@@ -22,6 +23,7 @@ def inverse_naive_dft(X):
 
 
 def dft2d(image):
+    """naive 2D dft"""
     rows, cols = image.shape
     # compute 1D dft along rows
     row_transform = np.zeros((rows, cols), dtype=complex)
@@ -48,7 +50,7 @@ def idft2d(F):
     for n in range(rows):
         f[n, :] = inverse_naive_dft(col_transform[n, :])
     
-    return np.real(f)
+    return f
 
 def fft(x):
     """Cooley Tukey recursive fft"""
@@ -109,7 +111,7 @@ def inverse_fft(x):
 
     # compute ifft and trim back to original length
     result = _ifft_recursive(padded_x)
-    return result[:N] / padded_N
+    return result[:N] / N
 
 def fft2d(image):
     """2D fft"""
@@ -139,14 +141,4 @@ def ifft2d(F):
     for n in range(rows):
         f[n, :] = inverse_fft(col_transform[n, :])
     
-    return np.real(f)
-
-def fft_shift(fft_data):
-    """shift the zero-frequency component to the center of the spectrum. """
-    rows, cols = fft_data.shape
-    return np.roll(np.roll(fft_data, rows // 2, axis=0), cols // 2, axis=1)
-
-def ifft_shift(fft_data):
-    """shift back the zero-frequency component to the original position. """
-    rows, cols = fft_data.shape
-    return np.roll(np.roll(fft_data, -rows // 2, axis=0), -cols // 2, axis=1)
+    return f
