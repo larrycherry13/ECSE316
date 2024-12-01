@@ -60,33 +60,31 @@ def fast_mode(image):
     plt.show()
 
 def denoise(image):
-    """denoise the image by removing high frequencies and displaying results"""
-
     fft_result = fft2d(image)
-    # Zero out high frequencies
     rows, cols = fft_result.shape
     crow, ccol = rows // 2, cols // 2
-    cutoff = min(rows, cols) // 9  #1/9 of the size
-    row_min, row_max = crow - cutoff, crow + cutoff
-    col_min, col_max = ccol - cutoff, ccol + cutoff
 
-    fft_result[row_min:row_max, col_min:col_max] = 0
+    cutoff = min(rows, cols) // 9
+    Y, X = np.ogrid[:rows, :cols]
+    mask = ((X - ccol)**2 + (Y - crow)**2) < cutoff**2
+    fft_result[mask] = 0
 
     denoised_fft = ifft2d(fft_result)
-
     denoised_image = np.abs(denoised_fft)
+    non_zero_count = np.count_nonzero(fft_result)
 
-    print(f"Number of non-zero coefficients: {np.count_nonzero(fft_result)}")
-    print(f"Fraction of original coefficients: {np.count_nonzero(fft_result) / (rows * cols):.2%}")
+    print(f"Number of non-zero coefficients: {non_zero_count}")
+    print(f"Fraction of original coefficients: {non_zero_count / (rows * cols):.2%}")
 
     plt.figure(figsize=(10, 5))
     plt.subplot(1, 2, 1)
-    plt.axis('off')
-    plt.title("Original Image")
     plt.imshow(image, cmap='gray')
+    plt.title("Original Image")
+    plt.axis('off')
+
     plt.subplot(1, 2, 2)
-    plt.title("Denoised Image")
     plt.imshow(denoised_image, cmap='gray')
+    plt.title("Denoised Image")
     plt.axis('off')
     plt.show()
     
@@ -159,9 +157,8 @@ def measure_runtime(method, size):
 
 
 def plot():
-    sizes = [2**i for i in range(5, 11)]  # From 32 to 1024
-    repetitions = 10  # Number of repetitions for each size
-
+    sizes = [2**i for i in range(3, 9)]  # From 8x8 to 256x256
+    repetitions = 10
     naive_times = []
     fft_times = []
     errors_naive = []
@@ -171,18 +168,18 @@ def plot():
         naive_results = []
         fft_results = []
         for _ in range(repetitions):
-            data = np.random.random((size, size))  # Generate random 2D data
+            data = np.random.random((size, size))
 
-            # Measure runtime for 2D naive DFT
-            start_time = time.time()
-            dft2d(data)  # Assuming dft2d is the correct function name
-            naive_time = time.time() - start_time
+            # Timing Naive DFT
+            start = time.time()
+            dft2d(data)
+            naive_time = time.time() - start
             naive_results.append(naive_time)
 
-            # Measure runtime for 2D FFT
-            start_time = time.time()
-            fft2d(data)  # Assuming fft2d is the correct function name
-            fft_time = time.time() - start_time
+            # Timing FFT
+            start = time.time()
+            fft2d(data)
+            fft_time = time.time() - start
             fft_results.append(fft_time)
 
         naive_mean = np.mean(naive_results)
@@ -192,16 +189,16 @@ def plot():
 
         naive_times.append(naive_mean)
         fft_times.append(fft_mean)
-        errors_naive.append(naive_std)
-        errors_fft.append(fft_std)
+        errors_naive.append(1.96 * naive_std)  # 95% confidence interval, change to appropriate value for 97%
+        errors_fft.append(1.96 * fft_std)      # Same as above
 
         print(f"Size: {size}x{size}")
-        print(f"Naive DFT - Mean: {naive_mean:.5f}s, Std: {naive_std:.5f}s")
-        print(f"FFT - Mean: {fft_mean:.5f}s, Std: {fft_std:.5f}s")
+        print(f"Naive DFT - Mean: {naive_mean:.5f}s, Std Dev: {naive_std:.5f}s")
+        print(f"FFT - Mean: {fft_mean:.5f}s, Std Dev: {fft_std:.5f}s")
 
     plt.figure(figsize=(10, 6))
-    plt.errorbar(sizes, naive_times, yerr=errors_naive, label='Naive DFT', fmt='-o')
-    plt.errorbar(sizes, fft_times, yerr=errors_fft, label='FFT', fmt='-o')
+    plt.errorbar(sizes, naive_times, yerr=errors_naive, label='Naive DFT', fmt='-o', capsize=5, elinewidth=2, markeredgewidth=2, markersize=5)
+    plt.errorbar(sizes, fft_times, yerr=errors_fft, label='FFT', fmt='-o', capsize=5, elinewidth=2, markeredgewidth=2, markersize=5)
     plt.xlabel('Array Size (NxN)')
     plt.ylabel('Runtime (seconds)')
     plt.title('Runtime Comparison of DFT and FFT')
@@ -210,6 +207,9 @@ def plot():
     plt.legend()
     plt.grid(True)
     plt.show()
+
+plot()
+
 
 
 
